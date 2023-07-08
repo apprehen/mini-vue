@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+<body>
+  <div class="node"></div>
+  <script>
+    // 传统对象 key只能是字符串
+    // const data = {}
+    // const element = document.querySelector('.node')
+    // console.log(element)
+    // console.log(element.toString())
+    // // 会自动调用toString方法将key转化为字符串
+    // data[element] = 'objectData'
+    // console.log(data['[object HTMLDivElement]'])
+
+    // // map对象 key可以是任意类型 也就是说 value - value
+    // const dataMap = new Map()
+    // const elementMap = document.querySelector('.node')
+    // dataMap.set(elementMap, 'mapData')
+    // console.log(dataMap)
+    // console.log(dataMap.get(elementMap))
+    // const arr = [1, 2, 3]
+    // // 将数组转化为map对象
+    // const arrMap = new Map(arr.map((item, index) => [item, index]))
+    // console.log(arrMap) 
+    const map = new WeakMap()
+    map.set([1,2,3], 'array')
+    // map.set({a: 1}, 'object')
+    console.log(map)
+</script>
+</body>
+</html>

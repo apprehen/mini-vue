@@ -1,0 +1,16 @@
+{
+  "name": "mini-vue",
+  "version": "1.0.0",
+  "description": "用于实现简单vue的一个文件捏",
+  "main": "index.js",
+  "author": "月晕",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "vite": "^4.4.2"
+  }
+}
