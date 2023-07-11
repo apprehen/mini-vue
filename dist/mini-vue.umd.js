@@ -2,135 +2,150 @@
   typeof define === "function" && define.amd ? define(factory) : factory();
 })(function() {
   "use strict";
-  let activeEffect;
-  const effectStack = [];
-  function effect(fn) {
-    const effectFn = () => {
-      try {
-        activeEffect = effectFn;
-        effectStack.push(effectFn);
-        return fn();
-      } finally {
-        effectStack.pop();
-        activeEffect = effectStack[effectStack.length - 1];
-      }
-    };
-    effectFn();
-    return effectFn;
-  }
-  const targetMap = /* @__PURE__ */ new WeakMap();
-  function track(target, key) {
-    if (!activeEffect) {
-      return;
-    }
-    let depsMap = targetMap.get(target);
-    if (!depsMap) {
-      targetMap.set(target, depsMap = /* @__PURE__ */ new Map());
-    }
-    let dep = depsMap.get(key);
-    if (!dep) {
-      depsMap.set(key, dep = /* @__PURE__ */ new Set());
-    }
-    dep.add(activeEffect);
-  }
-  function trigger(target, key) {
-    const depsMap = targetMap.get(target);
-    if (!depsMap) {
-      return;
-    }
-    const dep = depsMap.get(key);
-    if (!dep) {
-      return;
-    }
-    dep.forEach((effect2) => {
-      effect2();
-    });
-  }
-  function isObject(val) {
-    return typeof val === "object" && val !== null;
-  }
-  function haschanged(oldValue, newValue) {
-    return oldValue !== newValue && !(Number.isNaN(oldValue) && Number.isNaN(newValue));
-  }
   function isArray(target) {
     return Array.isArray(target);
   }
-  const proxyMap = /* @__PURE__ */ new WeakMap();
-  function reactive(target) {
-    if (!isObject(target))
-      return target;
-    if (isReactive(target))
-      return target;
-    if (proxyMap.has(target))
-      return proxyMap.get(target);
-    const proxy = new Proxy(target, {
-      /*
-      Reflect
-        - 反射
-        - 作用：可以通过编程的方式操作对象
-        - 语法：Reflect.xxx(target, key, value)
-        - 用法就是和Object类似，但是Object具有局限性
-        - 比如增加删除属性需要写try catch，而Reflect不需要 直接if else判断即可
-        - 比如在object的key中不能是一个symbol，而Reflect可以
-        Reflect 提供的是一整套反射能力 API，它们的调用方式，参数和返回值都是统一风格的，我们可以使用 Reflect 写出更优雅的反射代码。
-      
-      */
-      get(target2, key, receiver) {
-        const res = Reflect.get(target2, key, receiver);
-        if (key === "__isReactive")
-          return true;
-        track(target2, key);
-        return isObject(res) ? reactive(res) : res;
-      },
-      set(target2, key, value, receiver) {
-        let oldLength = target2.length;
-        const oldValue = target2[key];
-        const res = Reflect.set(target2, key, value, receiver);
-        if (haschanged(oldValue, value)) {
-          trigger(target2, key);
-          if (isArray(target2) && haschanged(oldLength, target2.length)) {
-            trigger(target2, "length");
+  function isString(target) {
+    return typeof target === "string";
+  }
+  function isNumber(target) {
+    return typeof target === "number";
+  }
+  const ShapeFlags = {
+    ELEMENT: 1,
+    // 0000000000000001
+    TEXT: 1 << 1,
+    // 0000000000000010
+    FRAGMENT: 1 << 2,
+    // 0000000000000100
+    COMPONENT: 1 << 3,
+    // 0000000000001000
+    TEXT_CHILDREN: 1 << 4,
+    // 0000000000001000
+    ARRAY_CHILDREN: 1 << 5,
+    // 0000000000100000
+    CHILDREN: 1 << 4 | 1 << 5
+  };
+  const Text = Symbol("Text");
+  const Fragment = Symbol("Fragment");
+  function h(type, props, children) {
+    let shapeFlag = 0;
+    if (isString(type)) {
+      shapeFlag = ShapeFlags.ELEMENT;
+    } else if (type === Text) {
+      shapeFlag = ShapeFlags.TEXT;
+    } else if (type === Fragment) {
+      shapeFlag = ShapeFlags.FRAGMENT;
+    } else {
+      shapeFlag = ShapeFlags.COMPONENT;
+    }
+    if (isString(children) || isNumber(children)) {
+      shapeFlag |= ShapeFlags.TEXT_CHILDREN;
+      children = children.toString();
+    } else if (isArray(children)) {
+      shapeFlag |= ShapeFlags.ARRAY_CHILDREN;
+    }
+    return {
+      type,
+      props,
+      children,
+      shapeFlag
+    };
+  }
+  function render(vnode2, container) {
+    mount(vnode2, container);
+  }
+  function mount(vnode2, container) {
+    const { shapeFlag } = vnode2;
+    if (shapeFlag & ShapeFlags.ELEMENT) {
+      mountElement(vnode2, container);
+    } else if (shapeFlag & ShapeFlags.TEXT) {
+      mountText(vnode2, container);
+    } else if (shapeFlag & ShapeFlags.FRAGMENT) {
+      mountFragment(vnode2, container);
+    } else
+      ;
+  }
+  function mountElement(vnode2, container) {
+    const { type, props } = vnode2;
+    const el = document.createElement(type);
+    moutProps(props, el);
+    mountChildren(vnode2, el);
+    container.appendChild(el);
+  }
+  function mountText(vnode2, container) {
+    const textNode = document.createTextNode(vnode2.children);
+    container.appendChild(textNode);
+  }
+  function mountFragment(vnode2, container) {
+    mountChildren(vnode2, container);
+  }
+  const domPropsRE = /\[A-Z]|^(?:value|checked|selected|muted)$/;
+  function moutProps(props, el) {
+    for (const key in props) {
+      const value = props[key];
+      switch (key) {
+        case "class":
+          el.className = value;
+          break;
+        case "style":
+          for (const styleName in value) {
+            el.style[styleName] = value[styleName];
           }
-        }
-        return res;
-      }
-    });
-    proxyMap.set(target, proxy);
-    return proxy;
-  }
-  function isReactive(target) {
-    return !!(target && target.__isReactive);
-  }
-  function ref(value) {
-    if (isRef(value))
-      return value;
-    return new RefImpl(value);
-  }
-  function isRef(value) {
-    return !!(value && value.__isRef);
-  }
-  class RefImpl {
-    constructor(value) {
-      this._value = convert(value);
-      this.__isRef = true;
-    }
-    get value() {
-      track(this, "value");
-      return this._value;
-    }
-    set value(newValue) {
-      if (haschanged(newValue, this._value)) {
-        this._value = convert(newValue);
-        trigger(this, "value");
+          break;
+        default:
+          if (/^on[^a-z]/.test(key)) {
+            const eventName = key.slice(2).toLowerCase();
+            el.addEventListener(eventName, value);
+          } else if (domPropsRE.test(key)) {
+            if (value === "" && typeof el[key] === "boolean") {
+              value = true;
+            }
+            el[key] = value;
+          } else {
+            if (value == null || value === false) {
+              el.removeAttribute(key);
+            } else {
+              el.setAttribute(key, value);
+            }
+          }
+          break;
       }
     }
   }
-  function convert(value) {
-    return isObject(value) ? reactive(value) : value;
+  function mountChildren(vnode2, container) {
+    const { shapeFlag, children } = vnode2;
+    if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
+      mountText(vnode2, container);
+    } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+      children.forEach((child) => mount(child, container));
+    }
   }
-  window.observed = reactive({ count: 0 });
-  const foo = window.foo = ref(1);
-  effect(() => {
-    console.log("EXPLOSIONING " + foo.value);
-  });
+  const vnode = h(
+    "div",
+    {
+      class: "a b",
+      style: {
+        border: "1px solid red",
+        fontSize: "20px"
+      },
+      onClick: () => {
+        console.log("click");
+      },
+      id: "foo",
+      checked: "",
+      custom: false
+    },
+    [
+      h("ul", null, [
+        h("li", { style: { color: "red" } }, "1"),
+        h("li", { style: { color: "green" } }, "2"),
+        h("li", { style: { color: "blue" } }, "3"),
+        h(Fragment, null, [h("li", null, "4"), h("li", null, "5")]),
+        h(Text, null, "6"),
+        h("li", null, "hello world")
+      ])
+    ]
+  );
+  render(vnode, document.body);
 });

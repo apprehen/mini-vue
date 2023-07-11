@@ -41,5 +41,4 @@ class ComputedRefImpl{
   set value(newValue){
     this._setter(newValue)
   }
-
 }
