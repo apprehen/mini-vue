@@ -1,2 +1,4 @@
-export {h, Fragment, Text, ShapeFlags} from './vnode'
-export {render} from './render'
+export { h, Text, Fragment } from "./vnode"
+export { render } from "./render"
+export { createApp } from "./createApp"
+export { nextTick } from "./scheduler"

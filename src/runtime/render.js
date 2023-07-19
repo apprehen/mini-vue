@@ -22,7 +22,7 @@ export function render(vnode, container) {
  * @param {Element} container:容器
  * @param {Element | null} anchor:锚点 (插入位置)
  */
-function patch(n1, n2, container, anchor) {
+export function patch(n1, n2, container, anchor) {
 	if (n1 && !isSameVNode(n1, n2)) {
 		anchor = (n1.anchor || n1.el).nextSibling
 		unmount(n1)
@@ -227,30 +227,30 @@ function patchUnkeyedChildren(c1, c2, container, anchor) {
 }
 
 // react中的diff算法原理
-function patchKeyedChildren(c1, c2, container, anchor) {
-	const map = new Map()
-	c1.forEach((perv, j) => {
-		map.set(perv.key, { perv, j })
-	})
-	let maxNewIndexSoFar = 0
-	for (let i = 0; i < c2.length; i++) {
-		const next = c2[i]
-		const curAnchor = i - 1 < 0 ? c1[0].el : c2[i - 1].el.nextSibling
-		if (map.has(next.key)) {
-			const { prev, j } = map.get(next.key)
-			patch(prev, next, container, anchor)
-			if (j < maxNewIndexSoFar) {
-				container.insertBefore(next.el, curAnchor)
-			} else {
-				maxNewIndexSoFar = j
-			}
-			map.delete(next.key)
-		} else {
-			patch(null, next, container, curAnchor)
-		}
-	}
-	map.forEach(({ perv }) => unmount(perv))
-}
+// function patchKeyedChildren(c1, c2, container, anchor) {
+// 	const map = new Map()
+// 	c1.forEach((perv, j) => {
+// 		map.set(perv.key, { perv, j })
+// 	})
+// 	let maxNewIndexSoFar = 0
+// 	for (let i = 0; i < c2.length; i++) {
+// 		const next = c2[i]
+// 		const curAnchor = i - 1 < 0 ? c1[0].el : c2[i - 1].el.nextSibling
+// 		if (map.has(next.key)) {
+// 			const { prev, j } = map.get(next.key)
+// 			patch(prev, next, container, anchor)
+// 			if (j < maxNewIndexSoFar) {
+// 				container.insertBefore(next.el, curAnchor)
+// 			} else {
+// 				maxNewIndexSoFar = j
+// 			}
+// 			map.delete(next.key)
+// 		} else {
+// 			patch(null, next, container, curAnchor)
+// 		}
+// 	}
+// 	map.forEach(({ perv }) => unmount(perv))
+// }
 
 function isSameVNode(prevVNode, vnode) {
 	return prevVNode.type === vnode.type
@@ -289,11 +289,6 @@ function patchKeyedChildren(c1, c2, container, anchor) {
 			unmount(c1[j])
 		}
 	} else {
-		// a b c d f e
-		// a c d b g e
-		// i = 1
-		// e1 = 5 --> 4
-		// e2 = 5 --> 4
 		// 4. 若不满足3 采用传统的diff算法 但是不真的移动和添加，只做标记和删除
 		const map = new Map()
 		c1.forEach((perv, j) => {
@@ -321,30 +316,33 @@ function patchKeyedChildren(c1, c2, container, anchor) {
 		}
 		map.forEach(({ perv }) => unmount(perv))
 		if (move) {
-			// 5.需要移动，采用新的最长上升子序列算法
+			// 5.需要移动，则采用新的最长上升子序列算法
 			const seq = getSequence(source)
 			let j = seq.length - 1
 			for (let k = source.length - 1; k >= 0; k--) {
-				const pos = k + i
-				const nextPos = pos + 1
-				const curAnchor = (c2[nextPos] && c2[nextPos].el) || anchor
-				if (source[k] == -1) {
-					// mount
-					patch(null, c2[pos], container, curAnchor)
-				} else if (seq[j] === k) {
+				if (k === seq[j]) {
 					// 不用移动
 					j--
 				} else {
-					// 移动
-					container.insertBefore(c2[pos].el, curAnchor)
+					const pos = k + i
+					const nextPos = pos + 1
+					const curAnchor = (c2[nextPos] && c2[nextPos].el) || anchor
+					if (source[k] === -1) {
+						// mount
+						patch(null, c2[pos], container, curAnchor)
+					} else {
+						// 移动
+						container.insertBefore(c2[pos].el, curAnchor)
+					}
 				}
 			}
 		} else if (toMounted.length) {
+			// 6.不需要移动，但还有未添加的元素
 			for (let k = toMounted.length - 1; k >= 0; k--) {
 				const pos = toMounted[k]
 				const nextPos = pos + 1
 				const curAnchor = (c2[nextPos] && c2[nextPos].el) || anchor
-				path(null, c2[pos], container, curAnchor)
+				patch(null, c2[pos], container, curAnchor)
 			}
 		}
 	}
@@ -352,70 +350,107 @@ function patchKeyedChildren(c1, c2, container, anchor) {
 
 // [10,9,2,5,101,3,7,18] -> 求最长子序列
 // [1,1,1,2,3,2,3,4]
-function getSequence(source) {}
-
-// the first
-const lengthOfLTS = function (nums) {
-	const dp = new Array(nums.length).fill(1)
-	let max = 1
-	for (let i = 0; i < nums.length; i++) {
-		for (let j = 0; j <= i; j++) {
-			if (nums[i] > nums[j]) {
-				// 前面的数比后面的数小不此一次 即判断
-				dp[i] = Math.max(dp[i], dp[j] + 1)
-			}
-		}
-		max = Math.max(max, dp[i])
-	}
-	return max
-}
-
-const lengthOfLTSSec = function (nums) {
-	const arr = [nums[0]]
-	// 记录arr中添加的每个数的位置
+function getSequence(nums) {
+	const result = []
 	const position = []
-	for (let i = 1; i < nums.length; i++) {
-		if (nums[i] > arr[arr.length - 1]) {
-			arr.push(nums[i])
-			position.push(arr.length - 1)
+	for (let i = 0; i < nums.length; i++) {
+		if (nums[i] === -1) {
+			continue
+		}
+		// result[result.length - 1]可能为undefined，此时nums[i] > undefined为false
+		if (nums[i] > result[result.length - 1]) {
+			result.push(nums[i])
+			position.push(result.length - 1)
 		} else {
-			// 线性查找
-			for (let j = 0; j < arr.length; j++) {
-				// 找到第一个大于等于nums[i]的数，替换掉
-				if (arr[j] >= nums[i]) {
-					arr[j] = nums[i]
-					position.push(j)
+			let l = 0,
+				r = result.length - 1
+			while (l <= r) {
+				const mid = ~~((l + r) / 2)
+				if (nums[i] > result[mid]) {
+					l = mid + 1
+				} else if (nums[i] < result[mid]) {
+					r = mid - 1
+				} else {
+					l = mid
 					break
 				}
 			}
-
-			// 采用二分查找
-			// let left = 0
-			// let right = arr.length - 1
-			// while (left < right) {
-			// 	const mid = (left + right) >> 1
-			// 	if (arr[mid] < nums[i]) {
-			// 		left = mid + 1
-			// 	} else {
-			// 		right = mid
-			// 	}
-			// }
-			// arr[left] = nums[i]
+			result[l] = nums[i]
+			position.push(l)
 		}
 	}
-	let cur = arr.length - 1
-	for (let i = position.length - 1; i >= 0; i--) {
+	let cur = result.length - 1
+	// 这里复用了result，它本身已经没用了
+	for (let i = position.length - 1; i >= 0 && cur >= 0; i--) {
 		if (position[i] === cur) {
-			arr[cur] = i
-			cur--
+			result[cur--] = i
 		}
 	}
-	return {
-		arr: arr,
-		length: arr.length,
-		position: position,
-	}
+	return result
 }
+
+// the first
+// const lengthOfLTS = function (nums) {
+// 	const dp = new Array(nums.length).fill(1)
+// 	let max = 1
+// 	for (let i = 0; i < nums.length; i++) {
+// 		for (let j = 0; j <= i; j++) {
+// 			if (nums[i] > nums[j]) {
+// 				// 前面的数比后面的数小不此一次 即判断
+// 				dp[i] = Math.max(dp[i], dp[j] + 1)
+// 			}
+// 		}
+// 		max = Math.max(max, dp[i])
+// 	}
+// 	return max
+// }
+
+// const lengthOfLTSSec = function (nums) {
+// 	const arr = [nums[0]]
+// 	// 记录arr中添加的每个数的位置
+// 	const position = []
+// 	for (let i = 1; i < nums.length; i++) {
+// 		if (nums[i] > arr[arr.length - 1]) {
+// 			arr.push(nums[i])
+// 			position.push(arr.length - 1)
+// 		} else {
+// 			// 线性查找
+// 			for (let j = 0; j < arr.length; j++) {
+// 				// 找到第一个大于等于nums[i]的数，替换掉
+// 				if (arr[j] >= nums[i]) {
+// 					arr[j] = nums[i]
+// 					position.push(j)
+// 					break
+// 				}
+// 			}
+
+// 			// 采用二分查找
+// 			// let left = 0
+// 			// let right = arr.length - 1
+// 			// while (left < right) {
+// 			// 	const mid = (left + right) >> 1
+// 			// 	if (arr[mid] < nums[i]) {
+// 			// 		left = mid + 1
+// 			// 	} else {
+// 			// 		right = mid
+// 			// 	}
+// 			// }
+// 			// arr[left] = nums[i]
+// 		}
+// 	}
+// 	let cur = arr.length - 1
+// 	for (let i = position.length - 1; i >= 0; i--) {
+// 		if (position[i] === cur) {
+// 			arr[cur] = i
+// 			cur--
+// 		}
+// 	}
+// 	return {
+// 		arr: arr,
+// 		length: arr.length,
+// 		position: position,
+// 	}
+// }
 
 // const res = lengthOfLTSSec([10, 9, 2, 5, 3, 7, 101, 18])
 

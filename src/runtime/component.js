@@ -1,7 +1,8 @@
 import { reactive } from "../reactive/reactive"
 import { effect } from "../reactive/effect"
 import { patch } from "./render"
-import { nomalizeVNode } from "./vnode"
+import { normalizeVNode } from "./vnode"
+import { queueJob } from "./scheduler"
 function updateProps(instance, vnode) {
 	const { type: Component, props: vnodeProps } = vnode
 	const props = (instance.props = {})
@@ -13,13 +14,15 @@ function updateProps(instance, vnode) {
 			attrs[key] = vnodeProps[key]
 		}
 	}
+	// toThink: props源码是shallowReactive，确实需要吗?
+	// 需要。否则子组件修改props不会触发更新
 	instance.props = reactive(instance.props)
 }
 export function mountComponent(vnode, container, anchor) {
 	const { type: Component } = vnode
 	const instance = (vnode.component = {
-		props: null,
-		attrs: null,
+		props: {},
+		attrs: {},
 		setupState: null,
 		subTree: null,
 		ctx: null,
@@ -27,7 +30,9 @@ export function mountComponent(vnode, container, anchor) {
 		isMounted: false,
 		next: null,
 	})
+	// setupComponent
 	updateProps(instance, vnode)
+	// 源码：instance.setupState = proxyRefs(setupResult)
 	instance.setupState = Component.setup?.(instance.props, {
 		attrs: instance.attrs,
 		slot: null,
@@ -37,49 +42,39 @@ export function mountComponent(vnode, container, anchor) {
 		...instance.props,
 		...instance.setupState,
 	}
-	instance.mount = () => {
-		const subTree = (instance.subTree = nomalizeVNode(
-			Component.render(instance.ctx)
-		))
-		if (Object.keys(instance.attrs).length) {
-			subTree.props = {
-				...subTree.props,
-				...instance.attrs,
-			}
-		}
-		patch(null, subTree, container, anchor)
-	}
-	instance.mount()
-	instance.update = effect(() => {
-		if (!isMounted) {
-			// mount
-			const subTree = (instance.subTree = nomalizeVNode(
-				Component.render(instance.ctx)
-			))
-			fullThrough(instance, subTree)
-			patch(null, subTree, container, anchor)
-			vnode.el = subTree.el
-			instance.isMounted = true
-		} else {
-			if (instance.next) {
-				// 被动更新
-				vnode = instance.next
-				instance.next = null
-				updateProps(instance, vnode)
-				instance.ctx = {
-					...instance.props,
-					...instance.setupState,
+	instance.update = effect(
+		() => {
+			if (!instance.isMounted) {
+				// mount
+				const subTree = (instance.subTree = normalizeVNode(
+					Component.render(instance.ctx)
+				))
+				fullThrough(instance, subTree)
+				patch(null, subTree, container, anchor)
+				instance.isMounted = true
+				vnode.el = subTree.el
+			} else {
+				if (instance.next) {
+					// 被动更新
+					vnode = instance.next
+					instance.next = null
+					updateProps(instance, vnode)
+					instance.ctx = {
+						...instance.props,
+						...instance.setupState,
+					}
 				}
+				const prev = instance.subTree
+				const subTree = (instance.subTree = normalizeVNode(
+					Component.render(instance.ctx)
+				))
+				fullThrough(instance, subTree)
+				patch(prev, subTree, container, anchor)
+				vnode.el = subTree.el
 			}
-			const prev = instance.subTree
-			const subTree = (instance.subTree = nomalizeVNode(
-				Component.render(instance.ctx)
-			))
-			fullThrough(instance, subTree)
-			patch(prev, subTree, container, anchor)
-			vnode.el = subTree.el
-		}
-	})
+		},
+		{ scheduler: queueJob }
+	)
 }
 
 function fullThrough(instance, subTree) {

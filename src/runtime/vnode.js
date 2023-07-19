@@ -48,18 +48,17 @@ export function h(type, props, children) {
 		shapeFlag,
 		el: null,
 		anchor: null,
-		key: props && props.key,
+		key: props && (props.key != null ? props.key : null),
 		component: null, //专门用于存储组件的实例
 	}
 }
 
-export function nomalizeVNode(result) {
-	if (isArray(result)) {
+export function normalizeVNode(result) {
+	if (Array.isArray(result)) {
 		return h(Fragment, null, result)
 	}
 	if (isObject(result)) {
 		return result
 	}
-	// string number
 	return h(Text, null, result.toString())
 }
